@@ -13,8 +13,9 @@ type Container struct {
 	envs    []string // format: "KEY=VALUE"
 	volumes []string // format: "/host/path:/container/path"
 
-	id  string         // id created container
-	cli *client.Client // instance client docker
+	id      string         // id created container
+	cli     *client.Client // instance client docker
+	network string         // docker network name
 
 	err error
 }
@@ -91,4 +92,9 @@ func (c *Container) WithVolume(hostPath, containerPath string) *Container {
 	c.volumes = append(c.volumes, fmt.Sprintf("%s:%s", hostPath, containerPath))
 	return c
 
+}
+
+// SetNetwork sets the network for the container
+func (c *Container) SetNetwork(netName string) {
+	c.network = netName
 }

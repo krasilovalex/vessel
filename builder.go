@@ -17,7 +17,6 @@ import (
 
 type Builder struct {
 	tag        string
-	baseImage  string
 	directives []string          // instruction RUN, WORKDIR
 	copies     map[string]string // Mapping file for COPY (src -> dest)
 	copyDirs   map[string]string // directory (source_dir -> dest_dir)
@@ -43,11 +42,7 @@ func (b *Builder) From(image string) *Builder {
 		return b
 	}
 
-	if image == "" {
-		b.err = fmt.Errorf("vessel builder: FROM image cannot be empty")
-		return b
-	}
-	b.baseImage = image
+	b.directives = append(b.directives, fmt.Sprintf("FROM %s", image))
 	return b
 }
 
@@ -80,6 +75,16 @@ func (b *Builder) Copy(src, dest string) *Builder {
 	return b
 }
 
+// CopyFrom copies files from the specifed previous bulid step
+func (b *Builder) CopyFrom(stage, src, dest string) *Builder {
+	if b.err != nil {
+		return b
+	}
+
+	b.directives = append(b.directives, fmt.Sprintf("COPY --from=%s %s %s", stage, src, dest))
+	return b
+}
+
 // CopyDir adds the entire directory to the build context recursively
 func (b *Builder) CopyDir(srcDir, destDir string) *Builder {
 	if b.err != nil {
@@ -97,16 +102,12 @@ func (b *Builder) Build(ctx context.Context) error {
 		return fmt.Errorf("fluent error: %w", b.err)
 	}
 
-	if b.baseImage == "" {
-		return fmt.Errorf("vessel builder : missing FROM instruction")
-	}
-
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return fmt.Errorf("failed to init docker client: %w", err)
 	}
 
-	dockerfile := fmt.Sprintf("FROM %s\n", b.baseImage)
+	dockerfile := ""
 	for _, d := range b.directives {
 		dockerfile += d + "\n"
 	}

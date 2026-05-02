@@ -9,6 +9,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/pterm/pterm"
@@ -66,6 +67,15 @@ func (c *Container) Up(ctx context.Context) error {
 	}
 	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Starting container %s...", c.name))
 
+	var networkConfig *network.NetworkingConfig
+	if c.network != "" {
+		networkConfig = &network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				c.network: {},
+			},
+		}
+	}
+
 	resp, err := cli.ContainerCreate(ctx,
 		&container.Config{
 			Image:        c.image,
@@ -76,7 +86,8 @@ func (c *Container) Up(ctx context.Context) error {
 			PortBindings: portBindings,
 			Binds:        c.volumes,
 		},
-		nil, nil, c.name,
+		networkConfig,
+		nil, c.name,
 	)
 	if err != nil {
 		spinner.Fail(fmt.Sprintf("Failed to create container %s", c.name))
@@ -129,5 +140,42 @@ func (c *Container) Remove(ctx context.Context) error {
 	}
 
 	spinner.Success(fmt.Sprintf("Container %s removed.", c.name))
+	return nil
+}
+
+// createNetwork creates a Docker network if it doen not already exist
+func createNetwork(ctx context.Context, cli *client.Client, networkName string) error {
+	networks, err := cli.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	for _, nw := range networks {
+		if nw.Name == networkName {
+			return nil
+		}
+	}
+
+	_, err = cli.NetworkCreate(ctx, networkName, network.CreateOptions{
+		Driver: "bridge",
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create network %s: %w", networkName, err)
+	}
+
+	return nil
+
+}
+
+// removeNetwork deletes Docker-network
+func removeNetwork(ctx context.Context, cli *client.Client, networkName string) error {
+	err := cli.NetworkRemove(ctx, networkName)
+	if err != nil {
+		if client.IsErrNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to remove network %s: %v", networkName, err)
+	}
 	return nil
 }
