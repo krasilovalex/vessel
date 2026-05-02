@@ -21,6 +21,19 @@ func (c *Container) Up(ctx context.Context) error {
 		return fmt.Errorf("vessel builder error: %v", c.err)
 	}
 
+	if len(c.dependsOn) > 0 {
+		spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Container %s is waiting for dependencies...", c.name))
+		for _, dep := range c.dependsOn {
+			select {
+			case <-dep.ready:
+			case <-ctx.Done():
+				spinner.Fail(fmt.Sprintf("Container %s cancelled waiting", c.name))
+				return ctx.Err()
+			}
+		}
+		spinner.Success(fmt.Sprintf("Dependencies for %s are ready!", c.name))
+	}
+
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return fmt.Errorf("failed to init docker client: %w", err)
@@ -101,6 +114,7 @@ func (c *Container) Up(ctx context.Context) error {
 	}
 
 	spinner.Success(fmt.Sprintf("Container %s is up and running! (ID: %s)", c.name, c.id[:12]))
+	close(c.ready)
 	return nil
 }
 

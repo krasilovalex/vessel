@@ -17,6 +17,9 @@ type Container struct {
 	cli     *client.Client // instance client docker
 	network string         // docker network name
 
+	dependsOn []*Container
+	ready     chan struct{} // channel-alert
+
 	err error
 }
 
@@ -26,6 +29,7 @@ func NewContainer(image string) *Container {
 	}
 	return &Container{
 		image: image,
+		ready: make(chan struct{}),
 	}
 }
 
@@ -97,4 +101,13 @@ func (c *Container) WithVolume(hostPath, containerPath string) *Container {
 // SetNetwork sets the network for the container
 func (c *Container) SetNetwork(netName string) {
 	c.network = netName
+}
+
+func (c *Container) DependsOn(deps ...*Container) *Container {
+	if c.err != nil {
+		return c
+	}
+
+	c.dependsOn = append(c.dependsOn, deps...)
+	return c
 }
