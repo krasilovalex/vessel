@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/pterm/pterm"
 )
 
 // Downlaod image, create and launch container
@@ -27,13 +28,18 @@ func (c *Container) Up(ctx context.Context) error {
 	c.cli = cli
 
 	fmt.Printf("Pulling image %s...\n", c.image)
-	reader, err := cli.ImagePull(ctx, c.image, image.PullOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+	_, _, inspectErr := cli.ImageInspectWithRaw(ctx, c.image)
+	if inspectErr != nil {
+		fmt.Printf("☁️  Image %s not found locally. Pulling from registry...\n", c.image)
+		reader, pullErr := cli.ImagePull(ctx, c.image, image.PullOptions{})
+		if pullErr != nil {
+			return fmt.Errorf("failed to pull image %s: %w", c.image, pullErr)
+		}
+		_, _ = io.Copy(os.Stdout, reader)
+		reader.Close()
+	} else {
+		fmt.Printf("📦 Image %s found locally. Skipping pull.\n", c.image)
 	}
-
-	_, _ = io.Copy(os.Stdout, reader)
-	reader.Close()
 
 	exposedPorts := nat.PortSet{}
 	portBindings := nat.PortMap{}
@@ -58,11 +64,14 @@ func (c *Container) Up(ctx context.Context) error {
 			},
 		}
 	}
-	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image:        c.image,
-		Env:          c.envs,
-		ExposedPorts: exposedPorts,
-	},
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Starting container %s...", c.name))
+
+	resp, err := cli.ContainerCreate(ctx,
+		&container.Config{
+			Image:        c.image,
+			Env:          c.envs,
+			ExposedPorts: exposedPorts,
+		},
 		&container.HostConfig{
 			PortBindings: portBindings,
 			Binds:        c.volumes,
@@ -70,15 +79,17 @@ func (c *Container) Up(ctx context.Context) error {
 		nil, nil, c.name,
 	)
 	if err != nil {
+		spinner.Fail(fmt.Sprintf("Failed to create container %s", c.name))
 		return fmt.Errorf("failed to create container: %w", err)
 	}
 	c.id = resp.ID
 
-	fmt.Printf("Starting container %s (ID: %s)...\n", c.name, c.id[:12])
 	if err := cli.ContainerStart(ctx, c.id, container.StartOptions{}); err != nil {
+		spinner.Fail(fmt.Sprintf("Failed to start container %s", c.name))
 		return fmt.Errorf("failed to start container: %w", err)
 	}
 
+	spinner.Success(fmt.Sprintf("Container %s is up and running! (ID: %s)", c.name, c.id[:12]))
 	return nil
 }
 
@@ -88,14 +99,15 @@ func (c *Container) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	fmt.Printf("\nStopping container %s...\n", c.name)
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Stopping container %s...", c.name))
 
 	err := c.cli.ContainerStop(ctx, c.id, container.StopOptions{})
 	if err != nil {
+		spinner.Fail(fmt.Sprintf("Failed to stop container %s", c.name))
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
 
-	fmt.Println("Done. See ya!")
+	spinner.Success(fmt.Sprintf("Container %s stopped.", c.name))
 	return nil
 }
 
@@ -105,15 +117,17 @@ func (c *Container) Remove(ctx context.Context) error {
 		return nil
 	}
 
-	fmt.Printf("Removing container %s...\n", c.name)
+	spinner, _ := pterm.DefaultSpinner.Start(fmt.Sprintf("Removing container %s...", c.name))
+
 	err := c.cli.ContainerRemove(ctx, c.id, container.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
 	})
-
 	if err != nil {
-		return fmt.Errorf("failed to remove contaner: %w", err)
+		spinner.Fail(fmt.Sprintf("Failed to remove container %s", c.name))
+		return fmt.Errorf("failed to remove container: %w", err)
 	}
 
+	spinner.Success(fmt.Sprintf("Container %s removed.", c.name))
 	return nil
 }
