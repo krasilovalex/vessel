@@ -16,6 +16,12 @@ Vessel is a high-performance, programmable Docker orchestrator built entirely in
 *   **Dynamic Secrets:** Fetch passwords from AWS Secrets Manager or HashiCorp Vault directly in your Go script *before* injecting them into containers.
 *   **Blazing Fast:** Starts containers concurrently using Go channels and `errgroup`.
 
+## 📦 Installation
+
+```bash
+go get [github.com/krasilovalex/vessel](https://github.com/krasilovalex/vessel)
+```
+
 ## ✨ Core Features
 *   🛠️ **In-Memory Multi-Stage Builds:** Compile Go, Node.js, or Python apps directly into lightweight images (~15MB) on the fly.
 *   🧠 **Smart DAG Dependencies:** Channel-based `DependsOn` ensures your backend naturally waits for your databases to be fully ready.
