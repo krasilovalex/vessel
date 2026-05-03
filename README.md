@@ -20,7 +20,6 @@ Vessel is a high-performance, programmable Docker orchestrator built entirely in
 
 ```bash
 go get [github.com/krasilovalex/vessel](https://github.com/krasilovalex/vessel)
-```
 
 ## ✨ Core Features
 *   🛠️ **In-Memory Multi-Stage Builds:** Compile Go, Node.js, or Python apps directly into lightweight images (~15MB) on the fly.
